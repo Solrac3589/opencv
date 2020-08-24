@@ -125,33 +125,49 @@ static bool ocl_prefilter_norm(InputArray _input, OutputArray _output, int winsi
 }
 #endif
 
+    //This function is for apply the prefilternorm (generally instead of xSobel)
 static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, int *buf )
 {
+    //winsize is the size of the window which will be used. Should have a odd number (minimum 5 max 255) (https://github.com/ros-perception/image_pipeline/blob/noetic/stereo_image_proc/cfg/Disparity.cfg)
     int x, y, wsz2 = winsize/2;
+    //Vsum seems to be the sum of all the values from a column from src  (the input image) it's not clear yet
     int* vsum = buf + (wsz2 + 1);
+    
+    //scale_g is one of the elements to dimensionate the value achieved in each pixel. it has the value of the size of the window (winsize^2) divided for the max value of the sum of elementes (8)
+    //scale s is also a elemente to dimensionate, but it's less clear
     int scale_g = winsize*winsize/8, scale_s = (1024 + scale_g)/(scale_g*2);
+    //OFS seems to be a generic offset (constant) and TABZ the size of the palette of possible values dimensioned.
     const int OFS = 256*5, TABSZ = OFS*2 + 256;
+    //tab will have the proper colour on which will point each value. In the borders. there will be a border which will be 0 and ftzero*2 respectively.
     uchar tab[TABSZ];
     const uchar* sptr = src.ptr();
+    //value of a row for the input image in bytes
     int srcstep = (int)src.step;
+    //size of elements in a row
     Size size = src.size();
 
+    //no idea
     scale_g *= scale_s;
 
+    //if value x - OFS is smaller than -ftzero, the colour will be 0. If it's higher than ftzero, will be ftzero*2. If it is between -ftzero and ftzer, will be the same value + ftzero
     for( x = 0; x < TABSZ; x++ )
         tab[x] = (uchar)(x - OFS < -ftzero ? 0 : x - OFS > ftzero ? ftzero*2 : x - OFS + ftzero);
 
+    //in vsum , for each column, we are summing the value of the first row multiplides by wsz2 (upper border ) and * 2(also bottom border)
     for( x = 0; x < size.width; x++ )
         vsum[x] = (ushort)(sptr[x]*(wsz2 + 2));
 
+    //in vsum, we sum all the values in the column (which has the size only of wsz2 (not clear why)) for each element in the first row. I imagine later we will fill and the extra needed.
     for( y = 1; y < wsz2; y++ )
     {
         for( x = 0; x < size.width; x++ )
             vsum[x] = (ushort)(vsum[x] + sptr[srcstep*y + x]);
     }
 
+    //we start iterating for each row
     for( y = 0; y < size.height; y++ )
     {
+        //not clear why the -1. top is 0 and bottom is seize_height-1 so why this signs
         const uchar* top = sptr + srcstep*MAX(y-wsz2-1,0);
         const uchar* bottom = sptr + srcstep*MIN(y+wsz2,size.height-1);
         const uchar* prev = sptr + srcstep*MAX(y-1,0);
@@ -159,29 +175,36 @@ static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, in
         const uchar* next = sptr + srcstep*MIN(y+1,size.height-1);
         uchar* dptr = dst.ptr<uchar>(y);
 
+        //for each element n the row, we sum the bottom value in the window and we remove the top value .
         for( x = 0; x < size.width; x++ )
             vsum[x] = (ushort)(vsum[x] + bottom[x] - top[x]);
 
+        //int the border values we give the value at index 0 and index size.width-1
         for( x = 0; x <= wsz2; x++ )
         {
             vsum[-x-1] = vsum[0];
             vsum[size.width+x] = vsum[size.width-1];
         }
 
+        //sum takes all the vsum values in wsz2. from -wsz2 to 0 8included) is vsum[0]. from 1 to wsz2 is vsum[x]
         int sum = vsum[0]*(wsz2 + 1);
         for( x = 1; x <= wsz2; x++ )
             sum += vsum[x];
 
+        //first val in row. curr[0] has an extra value (5 instead of 4) because prev does not exist. 
         int val = ((curr[0]*5 + curr[1] + prev[0] + next[0])*scale_g - sum*scale_s) >> 10;
+        //we extrat the coulou from the value
         dptr[0] = tab[val + OFS];
 
         for( x = 1; x < size.width-1; x++ )
         {
             sum += vsum[x+wsz2] - vsum[x-wsz2-1];
+            //here we have prev, so curr[0] is only 4. the value is 4 so it has the same force as prev, next, preval and postval. Chech the second part of the ecuation to understando better.
             val = ((curr[x]*4 + curr[x-1] + curr[x+1] + prev[x] + next[x])*scale_g - sum*scale_s) >> 10;
             dptr[x] = tab[val + OFS];
         }
 
+        //last value. post value does not exist.
         sum += vsum[x+wsz2] - vsum[x-wsz2-1];
         val = ((curr[x]*5 + curr[x-1] + prev[x] + next[x])*scale_g - sum*scale_s) >> 10;
         dptr[x] = tab[val + OFS];
