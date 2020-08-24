@@ -125,7 +125,7 @@ static bool ocl_prefilter_norm(InputArray _input, OutputArray _output, int winsi
 }
 #endif
 
-    //This function is for apply the prefilternorm (generally instead of xSobel)
+    //This function is for apply the prefilternorm (instead of xSobel). it seems to be a blur
 static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, int *buf )
 {
     //winsize is the size of the window which will be used. Should have a odd number (minimum 5 max 255) (https://github.com/ros-perception/image_pipeline/blob/noetic/stereo_image_proc/cfg/Disparity.cfg)
