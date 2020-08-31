@@ -130,10 +130,10 @@ static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, in
 {
     //winsize is the size of the window which will be used. Should have a odd number (minimum 5 max 255) (https://github.com/ros-perception/image_pipeline/blob/noetic/stereo_image_proc/cfg/Disparity.cfg)
     int x, y, wsz2 = winsize/2;
-    //Vsum seems to be the sum of all the values from a column from src  (the input image) it's not clear yet
+    //Vsum (value sum) seems to be the sum of all the values from a column from src  (the input image) it's not clear yet
     int* vsum = buf + (wsz2 + 1);
     
-    //scale_g is one of the elements to dimensionate the value achieved in each pixel. it has the value of the size of the window (winsize^2) divided for the max value of the sum of elementes (8)
+    //scale_g (scale gradient) dimensionate the part of the value for each pixel which is dependant in the same and consecutive pixels (previous the filter).
     //scale s is also a elemente to dimensionate, but it's less clear
     int scale_g = winsize*winsize/8, scale_s = (1024 + scale_g)/(scale_g*2);
     //OFS seems to be a generic offset (constant) and TABZ the size of the palette of possible values dimensioned.
@@ -153,11 +153,11 @@ static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, in
     for( x = 0; x < TABSZ; x++ )
         tab[x] = (uchar)(x - OFS < -ftzero ? 0 : x - OFS > ftzero ? ftzero*2 : x - OFS + ftzero);
 
-    //in vsum , for each column, we are summing the value of the first row multiplides by wsz2 (upper border ) and * 2(also bottom border)
+    //in vsum , for each column, we are summing the value of the first row multiplides by wsz2 + 2 (the wsz2 to give the same weight as the next iteration values (probably to substitute the missing values in the window, and the +2 is +1 to consider the same value and +1 to a automatic removal we will see later (*A) caused because in each iteration a top value is removed from past iteration and we have to do at first iteration manually.
     for( x = 0; x < size.width; x++ )
         vsum[x] = (ushort)(sptr[x]*(wsz2 + 2));
 
-    //in vsum, we sum all the values in the column (which has the size only of wsz2 (not clear why)) for each element in the first row. I imagine later we will fill and the extra needed.
+    //in vsum, we sum all the values in the column (which has the size only of wsz2 (we are at the first row, so are the adjacent values in the window at the same column) for each element in the first row. 
     for( y = 1; y < wsz2; y++ )
     {
         for( x = 0; x < size.width; x++ )
@@ -167,7 +167,7 @@ static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, in
     //we start iterating for each row
     for( y = 0; y < size.height; y++ )
     {
-        //not clear why the -1. top is 0 and bottom is seize_height-1 so why this signs
+        //top value has -1 because is the top in window from the past iteration (will be used to be removed). bottom is seize_height-1 (max heigh value) so why this signs
         const uchar* top = sptr + srcstep*MAX(y-wsz2-1,0);
         const uchar* bottom = sptr + srcstep*MIN(y+wsz2,size.height-1);
         const uchar* prev = sptr + srcstep*MAX(y-1,0);
@@ -175,7 +175,7 @@ static void prefilterNorm( const Mat& src, Mat& dst, int winsize, int ftzero, in
         const uchar* next = sptr + srcstep*MIN(y+1,size.height-1);
         uchar* dptr = dst.ptr<uchar>(y);
 
-        //for each element n the row, we sum the bottom value in the window and we remove the top value .
+        //for each element n the row, we sum the bottom value (new value in this iteration) in the window and we remove the top value .(*A) The top value is removed FROM PAST ITERATION
         for( x = 0; x < size.width; x++ )
             vsum[x] = (ushort)(vsum[x] + bottom[x] - top[x]);
 
