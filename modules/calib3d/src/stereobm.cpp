@@ -424,6 +424,7 @@ static void findStereoCorrespondenceBM_SIMD( const Mat& left, const Mat& right,
     int dy0 = MIN(_dy0, wsz2+1), dy1 = MIN(_dy1, wsz2+1);
     int ndisp = state.numDisparities;
     int mindisp = state.minDisparity;
+    //-1 is because the mindisp value is also considered as a disp. Let's say that mindisp is 2 and ndis is 4. in 0, the disparities will go from 2 to 5 (including 2 and 5). the distance between both elements i 3, not 4 (ndisp) like could seem.
     int lofs = MAX(ndisp - 1 + mindisp, 0);
     int rofs = -MIN(ndisp - 1 + mindisp, 0);
     int width = left.cols, height = left.rows;
@@ -440,7 +441,9 @@ static void findStereoCorrespondenceBM_SIMD( const Mat& left, const Mat& right,
     const uchar *lptr, *lptr_sub, *rptr;
     dType* dptr = disp.ptr<dType>();
     int sstep = (int)left.step;
+    //Disparity step
     int dstep = (int)(disp.step/sizeof(dptr[0]));
+    //Column step
     int cstep = (height + dy0 + dy1)*ndisp;
     short costbuf = 0;
     int coststep = cost.data ? (int)(cost.step/sizeof(costbuf)) : 0;
